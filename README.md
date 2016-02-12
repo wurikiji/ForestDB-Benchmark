@@ -1,3 +1,8 @@
+What is this repository for
+==================
+- For more flexible benchmark for ForestDB
+- To update benchmark for the latest ForestDB
+
 ForestDB-Benchmark
 ==================
 ForestDB-Benchmark is a benchmark program for embedded key-value storage engines, based on a sophisticated workload generation which is more realistic than performing a bunch of read/write operations. It generates key-value store operations using the APIs of Couchstore, which is the current storage engine of Couchbase Server. We currently provide API-wrappers for ForestDB, LevelDB, RocksDB, and WiredTiger.
