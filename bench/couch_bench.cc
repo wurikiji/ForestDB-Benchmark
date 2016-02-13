@@ -113,6 +113,9 @@ struct bench_info {
 
     // synchronous write
     uint8_t sync_write;
+
+	// background compaction
+	uint8_t compact_bg;
 };
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -1967,7 +1970,12 @@ void do_bench(struct bench_info *binfo)
                     c_args.bench_threads = bench_threads;
                     c_args.b_args = b_args;
                     c_args.lock = &cur_compaction_lock;
-                    thread_create(&tid_compactor, compactor, &c_args);
+
+					if (binfo->compact_bg){
+						thread_create(&tid_compactor, compactor, &c_args);
+					} else {
+						compactor(&c_args);
+					}
 #endif
 #ifdef __FDB_BENCH
                     c_args.flag = 0;
@@ -1981,7 +1989,12 @@ void do_bench(struct bench_info *binfo)
                     c_args.bench_threads = bench_threads;
                     c_args.b_args = b_args;
                     c_args.lock = &cur_compaction_lock;
-                    thread_create(&tid_compactor, compactor, &c_args);
+
+					if (binfo->compact_bg) {
+						thread_create(&tid_compactor, compactor, &c_args);
+					} else {
+						compactor(&c_argc);
+					}
 #endif
                 } else {
                     spin_unlock(&cur_compaction_lock);
@@ -2721,6 +2734,8 @@ struct bench_info get_benchinfo(char* bench_config_filename)
         iniparser_getint(cfg, (char*)"compaction:threshold", 30);
     binfo.compact_period =
         iniparser_getint(cfg, (char*)"compaction:period", 15);
+	binfo.compact_bg = 
+		iniparser_getint(cfg, (char*)"compaction:background", 0);
 
     // latency monitoring
     binfo.latency_rate =
