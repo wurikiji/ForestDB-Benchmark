@@ -2763,6 +2763,8 @@ struct bench_info get_benchinfo(char* bench_config_filename)
         iniparser_getint(cfg, (char*)"compaction:threshold", 30);
     binfo.compact_period =
         iniparser_getint(cfg, (char*)"compaction:period", 15);
+	binfo.compact_bg = 
+		iniparser_getint(cfg, (char*)"compaction:background", 0);
 
     // latency monitoring
     binfo.latency_rate =
