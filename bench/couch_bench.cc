@@ -114,8 +114,12 @@ struct bench_info {
     // synchronous write
     uint8_t sync_write;
 
-	// background compaction
+	/* begin: Added by gihwan */
 	uint8_t compact_bg;
+	uint8_t direct_io; // direct io on normal operations
+	uint8_t compact_libaio; // use libaio on compaction
+	uint8_t fallocate;
+	/* end: Added by gihwan */
 };
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -1481,10 +1485,15 @@ void do_bench(struct bench_info *binfo)
 #endif
 #if defined(__FDB_BENCH)
     // ForestDB: set compaction mode, threshold, WAL size, index type
-    couchstore_set_compaction(binfo->auto_compaction, binfo->compact_thres);
     couchstore_set_idx_type(binfo->fdb_type);
     couchstore_set_wal_size(binfo->fdb_wal);
     couchstore_set_auto_compaction_threads(binfo->auto_compaction_threads);
+
+	/* begin: Added by ogh */
+    couchstore_set_compaction(binfo->auto_compaction, binfo->compact_thres, 
+								binfo->compact_libaio);
+	/* end: Added by ogh */
+	couchstore_set_misc(binfo->direct_io, binfo->fallocate);
 #endif
 #if defined(__WT_BENCH) || defined(__FDB_BENCH)
     // WiredTiger & ForestDB: set compaction period
@@ -1978,6 +1987,25 @@ void do_bench(struct bench_info *binfo)
 					}
 #endif
 #ifdef __FDB_BENCH
+					if( !(binfo->compact_bg) ) {
+						/* do not operate background compaction */
+						for (j=0; j<bench_threads; ++j) {
+							if (b_args[j].mode != 2) {
+								// close all non-readers
+								bench_nrs++;
+								b_args[j].op_signal |= OP_CLOSE;
+							}
+						}
+						while (signal_count < bench_nrs) {
+							signal_count = 0;
+							usleep(10000);
+							for (j=0;j<bench_threads;++j){
+								if (b_args[j].op_signal & OP_CLOSE_OK) {
+									signal_count++;
+								}
+							}
+						}
+					}
                     c_args.flag = 0;
                     c_args.binfo = binfo;
                     c_args.curfile = (char*)malloc(256);
@@ -2730,12 +2758,11 @@ struct bench_info get_benchinfo(char* bench_config_filename)
                                    (char*)"sync");
     binfo.sync_write = (str[0]=='s')?(1):(0);
 
+
     binfo.compact_thres =
         iniparser_getint(cfg, (char*)"compaction:threshold", 30);
     binfo.compact_period =
         iniparser_getint(cfg, (char*)"compaction:period", 15);
-	binfo.compact_bg = 
-		iniparser_getint(cfg, (char*)"compaction:background", 0);
 
     // latency monitoring
     binfo.latency_rate =
@@ -2745,6 +2772,21 @@ struct bench_info get_benchinfo(char* bench_config_filename)
     }
     binfo.latency_max =
         iniparser_getint(cfg, (char*)"latency_monitor:max_samples", 1000000);
+
+	/* begin: Added by gihwan */
+	// add direct io flag for normal operation 
+	binfo.direct_io = 
+		iniparser_getint(cfg, (char*)"operation:direct_io", 0);
+	// add libaio flag for compaction 
+	binfo.compact_libaio = 
+		iniparser_getint(cfg, (char*)"compaction:use_libaio", 0);
+	// add foreground compaction flag 
+	binfo.compact_bg = 
+		iniparser_getint(cfg, (char*)"compaction:background", 0);
+	// add fallocate flag 
+	binfo.fallocate =
+		iniparser_getint(cfg, (char*)"db_config:fallocate", 0);
+	/* end: Added by gihwan */
 
     iniparser_free(cfg);
     return binfo;

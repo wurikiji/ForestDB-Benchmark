@@ -29,6 +29,12 @@ static int compression = 0;
 static int indexing_type = 0;
 static int auto_compaction_threads = 4;
 
+/* begin: Added by gihwan */
+static uint8_t config_direct = 0;
+static uint8_t config_fallocate = 0;
+static uint8_t c_libaio = 0;
+/* end: Added by gihwan */
+
 couchstore_error_t couchstore_set_flags(uint64_t flags) {
     config_flags = flags;
     return COUCHSTORE_SUCCESS;
@@ -41,10 +47,18 @@ couchstore_error_t couchstore_set_cache(uint64_t size) {
     cache_size = size;
     return COUCHSTORE_SUCCESS;
 }
+couchstore_error_t couchstore_set_misc(uint8_t direct_io,
+										uint8_t fallocate) {
+	config_direct = direct_io;
+	config_fallocate = fallocate;
+    return COUCHSTORE_SUCCESS;
+}
 couchstore_error_t couchstore_set_compaction(int mode,
-                                             size_t threshold) {
+                                             size_t threshold,
+											 uint8_t libaio) {
     c_auto = mode;
     c_threshold = threshold;
+	c_libaio = libaio;
     return COUCHSTORE_SUCCESS;
 }
 couchstore_error_t couchstore_set_auto_compaction_threads(int num_threads) {
@@ -129,11 +143,21 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
     config.num_wal_partitions = 31;
     config.num_bcache_partitions = 31;
     config.seqtree_opt = FDB_SEQTREE_NOT_USE;
-    if (flags & 0x10) {
+	if (config_direct) {
+		if (flags & 0x10) {
+			config.durability_opt = FDB_DRB_ODIRECT_ASYNC;
+		} else {
+			config.durability_opt = FDB_DRB_ODIRECT;
+		}
+	} else if (flags & 0x10) {
         config.durability_opt = FDB_DRB_NONE;
     } else {
         config.durability_opt = FDB_DRB_ASYNC;
     }
+	/* begin: Added by ogh */
+	config.fallocate = config_fallocate;
+	config.compaction_libaio = c_libaio;
+	/* end: Added by ogh */
     config.compress_document_body = (compression)?true:false;
     if (config_flags & 0x1) {
         config.wal_flush_before_commit = true;
