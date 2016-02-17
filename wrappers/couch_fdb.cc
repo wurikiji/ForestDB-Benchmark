@@ -194,6 +194,10 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
     } else {
         status = fdb_open(&dbfile, fname, &config);
     }
+	if (FDB_RESULT_SUCCESS != status) {
+		return COUCHSTORE_ERROR_OPEN_FILE;
+	}
+
     status = fdb_kvs_open_default(dbfile, &fdb, &kvs_config);
 
     (*pDb)->dbfile = dbfile;

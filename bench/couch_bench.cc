@@ -2504,6 +2504,11 @@ struct bench_info get_benchinfo(char* bench_config_filename)
     binfo.auto_compaction_threads =
         iniparser_getint(cfg, (char*)"db_config:auto_compaction_threads", 4);
 
+	/* prevent future error on initialization */
+	if (binfo.auto_compaction_threads < 1) {
+		binfo.auto_compaction_threads = 1
+	}
+
     // write buffer size for LevelDB & RocksDB
     binfo.wbs_init =
         iniparser_getint(cfg, (char*)"db_config:wbs_init_MB", 4);
