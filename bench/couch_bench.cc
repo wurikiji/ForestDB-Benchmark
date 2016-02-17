@@ -119,6 +119,7 @@ struct bench_info {
 	uint8_t direct_io; // direct io on normal operations
 	uint8_t compact_libaio; // use libaio on compaction
 	uint8_t fallocate;
+	uint8_t streamid;
 	/* end: Added by gihwan */
 };
 
@@ -1314,8 +1315,12 @@ wait_next:
 // non-standard functions for extension
 couchstore_error_t couchstore_set_flags(uint64_t flags);
 couchstore_error_t couchstore_set_cache(uint64_t size);
+couchstore_error_t couchstore_set_misc(uint8_t direct_io,
+										uint8_t fallocate);
+couchstore_error_t couchstore_set_streamid(uint8_t streamid);
 couchstore_error_t couchstore_set_compaction(int mode,
-                                             size_t threshold);
+                                             size_t threshold,
+											 uint8_t compaction_libaio);
 couchstore_error_t couchstore_set_auto_compaction_threads(int num_threads);
 couchstore_error_t couchstore_set_chk_period(size_t seconds);
 couchstore_error_t couchstore_open_conn(const char *filename);
@@ -1492,8 +1497,9 @@ void do_bench(struct bench_info *binfo)
 	/* begin: Added by ogh */
     couchstore_set_compaction(binfo->auto_compaction, binfo->compact_thres, 
 								binfo->compact_libaio);
-	/* end: Added by ogh */
 	couchstore_set_misc(binfo->direct_io, binfo->fallocate);
+	couchstore_set_streamid(binfo->streamid);
+	/* end: Added by ogh */
 #endif
 #if defined(__WT_BENCH) || defined(__FDB_BENCH)
     // WiredTiger & ForestDB: set compaction period
@@ -1980,14 +1986,12 @@ void do_bench(struct bench_info *binfo)
                     c_args.b_args = b_args;
                     c_args.lock = &cur_compaction_lock;
 
-					if (binfo->compact_bg){
-						thread_create(&tid_compactor, compactor, &c_args);
-					} else {
-						compactor(&c_args);
-					}
+					thread_create(&tid_compactor, compactor, &c_args);
 #endif
 #ifdef __FDB_BENCH
 					if( !(binfo->compact_bg) ) {
+						int signal_count = 0;
+						int bench_nrs = 0;
 						/* do not operate background compaction */
 						for (j=0; j<bench_threads; ++j) {
 							if (b_args[j].mode != 2) {
@@ -2018,11 +2022,7 @@ void do_bench(struct bench_info *binfo)
                     c_args.b_args = b_args;
                     c_args.lock = &cur_compaction_lock;
 
-					if (binfo->compact_bg) {
-						thread_create(&tid_compactor, compactor, &c_args);
-					} else {
-						compactor(&c_argc);
-					}
+					thread_create(&tid_compactor, compactor, &c_args);
 #endif
                 } else {
                     spin_unlock(&cur_compaction_lock);
@@ -2788,6 +2788,8 @@ struct bench_info get_benchinfo(char* bench_config_filename)
 	// add fallocate flag 
 	binfo.fallocate =
 		iniparser_getint(cfg, (char*)"db_config:fallocate", 0);
+	binfo.streamid =
+		iniparser_getint(cfg, (char*)"db_config:streamid", 0);
 	/* end: Added by gihwan */
 
     iniparser_free(cfg);

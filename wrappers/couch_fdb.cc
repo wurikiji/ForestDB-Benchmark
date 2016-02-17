@@ -33,6 +33,7 @@ static int auto_compaction_threads = 4;
 static uint8_t config_direct = 0;
 static uint8_t config_fallocate = 0;
 static uint8_t c_libaio = 0;
+static uint8_t config_streamid = 0;
 /* end: Added by gihwan */
 
 couchstore_error_t couchstore_set_flags(uint64_t flags) {
@@ -52,6 +53,10 @@ couchstore_error_t couchstore_set_misc(uint8_t direct_io,
 	config_direct = direct_io;
 	config_fallocate = fallocate;
     return COUCHSTORE_SUCCESS;
+}
+couchstore_error_t couchstore_set_streamid(uint8_t streamid) {
+	config_streamid = streamid;
+	return COUCHSTORE_SUCCESS;
 }
 couchstore_error_t couchstore_set_compaction(int mode,
                                              size_t threshold,
@@ -157,6 +162,7 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
 	/* begin: Added by ogh */
 	config.fallocate = config_fallocate;
 	config.compaction_libaio = c_libaio;
+	config.streamid = config_streamid;
 	/* end: Added by ogh */
     config.compress_document_body = (compression)?true:false;
     if (config_flags & 0x1) {
