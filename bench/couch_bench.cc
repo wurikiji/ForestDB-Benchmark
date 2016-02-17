@@ -2014,8 +2014,10 @@ void do_bench(struct bench_info *binfo)
 								}
 							}
 						}
+						c_args.flag = 1;
+					} else {
+						c_args.flag = 0;
 					}
-                    c_args.flag = 1;
                     c_args.binfo = binfo;
                     c_args.curfile = (char*)malloc(256);
                     c_args.newfile = (char*)malloc(256);
