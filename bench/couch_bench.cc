@@ -941,6 +941,7 @@ void * bench_thread(void *voidargs)
         if (args->op_signal & OP_CLOSE) {
             args->op_signal |= OP_CLOSE_OK; // set ack flag
             args->op_signal &= ~(OP_CLOSE); // clear flag
+			printf("\n\nStart compaction\n\n");
             while (!(args->op_signal & OP_REOPEN)) {
                 usleep(10000); // couchstore cannot write during compaction
             }
@@ -1986,7 +1987,11 @@ void do_bench(struct bench_info *binfo)
                     c_args.b_args = b_args;
                     c_args.lock = &cur_compaction_lock;
 
-					thread_create(&tid_compactor, compactor, &c_args);
+					if( (binfo->compact_bg) ) {
+						thread_create(&tid_compactor, compactor, &c_args);
+					} else {
+						compactor(&c_args);
+					}
 #endif
 #ifdef __FDB_BENCH
 					if( !(binfo->compact_bg) ) {
@@ -2010,7 +2015,7 @@ void do_bench(struct bench_info *binfo)
 							}
 						}
 					}
-                    c_args.flag = 0;
+                    c_args.flag = 1;
                     c_args.binfo = binfo;
                     c_args.curfile = (char*)malloc(256);
                     c_args.newfile = (char*)malloc(256);
@@ -2022,7 +2027,11 @@ void do_bench(struct bench_info *binfo)
                     c_args.b_args = b_args;
                     c_args.lock = &cur_compaction_lock;
 
-					thread_create(&tid_compactor, compactor, &c_args);
+					if( (binfo->compact_bg) ) {
+						thread_create(&tid_compactor, compactor, &c_args);
+					} else {
+						compactor(&c_args);
+					}
 #endif
                 } else {
                     spin_unlock(&cur_compaction_lock);
@@ -2506,7 +2515,7 @@ struct bench_info get_benchinfo(char* bench_config_filename)
 
 	/* prevent future error on initialization */
 	if (binfo.auto_compaction_threads < 1) {
-		binfo.auto_compaction_threads = 1
+		binfo.auto_compaction_threads = 1;
 	}
 
     // write buffer size for LevelDB & RocksDB
