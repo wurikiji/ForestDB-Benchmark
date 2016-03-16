@@ -120,6 +120,8 @@ struct bench_info {
 	uint8_t compact_libaio; // use libaio on compaction
 	uint8_t fallocate;
 	uint8_t streamid;
+	uint8_t inplace;
+	uint8_t trim;
 	/* end: Added by gihwan */
 };
 
@@ -694,6 +696,7 @@ struct compactor_args {
     int *cur_compaction;
     int bench_threads;
     uint8_t flag;
+	uint8_t inplace;
     spin_t *lock;
 };
 
@@ -713,7 +716,8 @@ void * compactor(void *voidargs)
                        &db);
 
     stopwatch_start(sw_compaction);
-    couchstore_compact_db(db, newfile);
+	couchstore_compact_db(db, newfile);
+
     couchstore_close_db(db);
     stopwatch_stop(sw_compaction);
 
@@ -870,7 +874,8 @@ void * bench_thread(void *voidargs)
 {
     struct bench_thread_args *args = (struct bench_thread_args *)voidargs;
     size_t i;
-    int j;
+    int j ;
+	uint64_t count[args->binfo->nfiles];
     int batchsize;
     int write_mode = 0, write_mode_r;
     int commit_mask[args->binfo->nfiles]; (void)commit_mask;
@@ -897,6 +902,7 @@ void * bench_thread(void *voidargs)
 
 #if defined(__FDB_BENCH) || defined(__WT_BENCH)
     DocInfo *rq_info = NULL;
+	memset(count, 0, sizeof(int) * binfo->nfiles);
 #else
     int file_doccount[args->binfo->nfiles], c;
     Doc **rq_doc_arr[args->binfo->nfiles];
@@ -1127,6 +1133,13 @@ void * bench_thread(void *voidargs)
                     }
                 }
             }
+			count[curfile_no] += batchsize;
+			if ((uint64_t)binfo->ndocs * binfo->inplace <= 
+					count[curfile_no] * 100 
+					&& binfo->trim) {
+				count[curfile_no] = 0;
+				couchstore_trim_stale(db[curfile_no]);
+			}
 #else
 
             for (i=0; i<binfo->nfiles;++i){
@@ -1317,7 +1330,8 @@ wait_next:
 couchstore_error_t couchstore_set_flags(uint64_t flags);
 couchstore_error_t couchstore_set_cache(uint64_t size);
 couchstore_error_t couchstore_set_misc(uint8_t direct_io,
-										uint8_t fallocate);
+										uint8_t fallocate,
+										uint8_t inplace);
 couchstore_error_t couchstore_set_streamid(uint8_t streamid);
 couchstore_error_t couchstore_set_compaction(int mode,
                                              size_t threshold,
@@ -1498,7 +1512,7 @@ void do_bench(struct bench_info *binfo)
 	/* begin: Added by ogh */
     couchstore_set_compaction(binfo->auto_compaction, binfo->compact_thres, 
 								binfo->compact_libaio);
-	couchstore_set_misc(binfo->direct_io, binfo->fallocate);
+	couchstore_set_misc(binfo->direct_io, binfo->fallocate, binfo->inplace);
 	couchstore_set_streamid(binfo->streamid);
 	/* end: Added by ogh */
 #endif
@@ -1555,7 +1569,10 @@ void do_bench(struct bench_info *binfo)
                 couchstore_set_flags(0x1);
             }
 #endif
-            couchstore_open_db(curfile, COUCHSTORE_OPEN_FLAG_CREATE, &db[i]);
+            couchstore_open_db(curfile, 
+					COUCHSTORE_OPEN_FLAG_CREATE |
+						   ((binfo->sync_write)?(0x10):(0x0)),
+							&db[i]);
 #if defined(__LEVEL_BENCH) || defined(__ROCKS_BENCH)
             if (!binfo->pop_commit) {
                 couchstore_set_sync(db[i], 0);
@@ -1864,6 +1881,9 @@ void do_bench(struct bench_info *binfo)
 #if defined(__FDB_BENCH) || defined(__COUCH_BENCH)
             if (display_tick % filesize_chk_term == 0) {
                 cur_size = get_filesize(curfile);
+				//ogh for fallocate
+				//cur_size = couchstore_db_eof(temp_db);
+				//printf("\nCur size is %lu\n\n", cur_size);
                 if (binfo->auto_compaction) { // auto
                     print_filesize_approx(cur_size, fsize1);
                 } else { // manual
@@ -1986,6 +2006,7 @@ void do_bench(struct bench_info *binfo)
                     c_args.bench_threads = bench_threads;
                     c_args.b_args = b_args;
                     c_args.lock = &cur_compaction_lock;
+					//c_args.inplace = 
 
 					if( (binfo->compact_bg) ) {
 						thread_create(&tid_compactor, compactor, &c_args);
@@ -2806,6 +2827,10 @@ struct bench_info get_benchinfo(char* bench_config_filename)
 		iniparser_getint(cfg, (char*)"db_config:fallocate", 0);
 	binfo.streamid =
 		iniparser_getint(cfg, (char*)"db_config:streamid", 0);
+	binfo.inplace = 
+		iniparser_getint(cfg, (char*)"compaction:inplace", 0);
+	binfo.trim = 
+		iniparser_getint(cfg, (char*)"db_config:trim", 0);
 	/* end: Added by gihwan */
 
     iniparser_free(cfg);

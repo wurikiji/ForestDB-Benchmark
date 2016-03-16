@@ -34,6 +34,7 @@ static uint8_t config_direct = 0;
 static uint8_t config_fallocate = 0;
 static uint8_t c_libaio = 0;
 static uint8_t config_streamid = 0;
+static uint8_t config_inplace = 0;
 /* end: Added by gihwan */
 
 couchstore_error_t couchstore_set_flags(uint64_t flags) {
@@ -49,9 +50,11 @@ couchstore_error_t couchstore_set_cache(uint64_t size) {
     return COUCHSTORE_SUCCESS;
 }
 couchstore_error_t couchstore_set_misc(uint8_t direct_io,
-										uint8_t fallocate) {
+										uint8_t fallocate,
+										uint8_t inplace) {
 	config_direct = direct_io;
 	config_fallocate = fallocate;
+	config_inplace = inplace;
     return COUCHSTORE_SUCCESS;
 }
 couchstore_error_t couchstore_set_streamid(uint8_t streamid) {
@@ -139,7 +142,9 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
         config.compaction_threshold = c_threshold;
     } else {
         config.compaction_mode = FDB_COMPACTION_MANUAL;
+		config.compaction_threshold = 0;
     }
+	config.block_reusing_threshold = config_inplace;
     config.num_compactor_threads = auto_compaction_threads;
     config.compactor_sleep_duration = c_period;
     config.chunksize = sizeof(uint64_t);
@@ -149,10 +154,11 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
     config.num_bcache_partitions = 31;
     config.seqtree_opt = FDB_SEQTREE_NOT_USE;
 	if (config_direct) {
+		printf("Use direct IO\n");
 		if (flags & 0x10) {
-			config.durability_opt = FDB_DRB_ODIRECT_ASYNC;
-		} else {
 			config.durability_opt = FDB_DRB_ODIRECT;
+		} else {
+			config.durability_opt = FDB_DRB_ODIRECT_ASYNC;
 		}
 	} else if (flags & 0x10) {
         config.durability_opt = FDB_DRB_NONE;
@@ -195,6 +201,7 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
         status = fdb_open(&dbfile, fname, &config);
     }
 	if (FDB_RESULT_SUCCESS != status) {
+		printf("Can not open file\n");
 		return COUCHSTORE_ERROR_OPEN_FILE;
 	}
 
@@ -220,6 +227,12 @@ couchstore_error_t couchstore_close_db(Db *db)
     free(db);
 
     return COUCHSTORE_SUCCESS;
+}
+
+LIBCOUCHSTORE_API
+size_t couchstore_db_eof(Db *db)
+{
+	return fdb_get_eof(db->dbfile);
 }
 
 LIBCOUCHSTORE_API
@@ -566,5 +579,31 @@ LIBCOUCHSTORE_API
 couchstore_error_t couchstore_compact_db(Db* source, const char* target_filename)
 {
     return couchstore_compact_db_ex(source, target_filename, 0x0, NULL);
+}
+
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#include "fdb_internal.h"
+LIBCOUCHSTORE_API
+void couchstore_trim_stale(Db* db)
+{
+	stale_header_info shdr;
+	filemgr_header_revnum_t revnum;
+	struct fstrim_range fsr;
+	uint64_t total=0;
+	reusable_block_list blist;
+
+	shdr = fdb_get_smallest_active_header(db->fdb);
+	revnum = shdr.revnum;
+
+	blist = fdb_get_reusable_block(db->fdb, shdr);
+	for (int k =0;k<(size_t)blist.n_blocks;++k) {
+		fsr.start = blist.blocks[k].bid * 4096;
+		fsr.len = blist.blocks[k].count * 4096;
+		total += fsr.len;
+		ioctl(db->fdb->file->fd, FITRIM, &fsr);
+	}
+	free(blist.blocks);
+
 }
 
