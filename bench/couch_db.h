@@ -95,6 +95,9 @@ extern "C" {
     LIBCOUCHSTORE_API
     couchstore_error_t couchstore_db_info(Db *db, DbInfo* info);
 
+	// ogh 
+    LIBCOUCHSTORE_API
+    size_t couchstore_db_eof(Db *db);
 
     /**
      * Returns the filename of the database, as given when it was opened.
@@ -600,6 +603,8 @@ extern "C" {
      LIBCOUCHSTORE_API
      void couchstore_last_os_error(char* buf, size_t size);
 
+	 LIBCOUCHSTORE_API
+	 void couchstore_trim_stale(Db* db);
 #ifdef __cplusplus
 }
 #endif
