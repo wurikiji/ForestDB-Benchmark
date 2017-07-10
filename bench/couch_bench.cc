@@ -122,13 +122,14 @@ struct bench_info {
 	uint8_t streamid;
 	uint8_t inplace;
 	uint8_t trim;
+	uint64_t blocksize;
 	/* end: Added by gihwan */
 };
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
 static uint32_t rnd_seed;
-static int print_term_ms = 100;
+static int print_term_ms = 1000;
 static int filesize_chk_term = 4;
 
 FILE *log_fp = NULL;
@@ -1134,12 +1135,6 @@ void * bench_thread(void *voidargs)
                 }
             }
 			count[curfile_no] += batchsize;
-			if ((uint64_t)binfo->ndocs * binfo->inplace <= 
-					count[curfile_no] * 100 
-					&& binfo->trim) {
-				count[curfile_no] = 0;
-				couchstore_trim_stale(db[curfile_no]);
-			}
 #else
 
             for (i=0; i<binfo->nfiles;++i){
@@ -1333,6 +1328,7 @@ couchstore_error_t couchstore_set_misc(uint8_t direct_io,
 										uint8_t fallocate,
 										uint8_t inplace);
 couchstore_error_t couchstore_set_streamid(uint8_t streamid);
+couchstore_error_t couchstore_set_blocksize(uint64_t blocksize);
 couchstore_error_t couchstore_set_compaction(int mode,
                                              size_t threshold,
 											 uint8_t compaction_libaio);
@@ -1439,6 +1435,7 @@ void do_bench(struct bench_info *binfo)
     int cur_compaction = -1;
     int bench_threads;
     uint64_t op_count_read, op_count_write, display_tick = 0;
+	uint64_t time_gap_for_trim = 0;//[[ogh : for trim ]]ogh
     uint64_t prev_op_count_read, prev_op_count_write;
     uint64_t written_init, written_final, written_prev;
     uint64_t avg_docsize;
@@ -1514,6 +1511,7 @@ void do_bench(struct bench_info *binfo)
 								binfo->compact_libaio);
 	couchstore_set_misc(binfo->direct_io, binfo->fallocate, binfo->inplace);
 	couchstore_set_streamid(binfo->streamid);
+	couchstore_set_blocksize(binfo->blocksize);
 	/* end: Added by ogh */
 #endif
 #if defined(__WT_BENCH) || defined(__FDB_BENCH)
@@ -1858,6 +1856,17 @@ void do_bench(struct bench_info *binfo)
                 written_final = print_proc_io_stat(cmd, 0);
             }
 
+			/* [[ogh : Call trim for all files*/
+			time_gap_for_trim += _gap.tv_sec * 1000000 + _gap.tv_usec;
+			if (binfo->trim && 
+					time_gap_for_trim >= binfo->trim * 1000000) {
+				time_gap_for_trim = 0;
+				printf("\nCall trim stale\n");
+				for (int fidx = 0 ;fidx < binfo->nfiles; fidx++) {
+					couchstore_trim_stale(b_args[0].db[fidx]);
+				}
+			}
+			/* ]]ogh */
             if (log_fp) {
                 // 1. elapsed time
                 // 2. average throughput
@@ -2827,6 +2836,8 @@ struct bench_info get_benchinfo(char* bench_config_filename)
 		iniparser_getint(cfg, (char*)"db_config:fallocate", 0);
 	binfo.streamid =
 		iniparser_getint(cfg, (char*)"db_config:streamid", 0);
+	binfo.blocksize = 
+		iniparser_getint(cfg, (char*)"db_config:blocksize", 4096);
 	binfo.inplace = 
 		iniparser_getint(cfg, (char*)"compaction:inplace", 0);
 	binfo.trim = 

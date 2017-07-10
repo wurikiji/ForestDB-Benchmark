@@ -35,6 +35,7 @@ static uint8_t config_fallocate = 0;
 static uint8_t c_libaio = 0;
 static uint8_t config_streamid = 0;
 static uint8_t config_inplace = 0;
+static uint64_t config_blocksize = 0;
 /* end: Added by gihwan */
 
 couchstore_error_t couchstore_set_flags(uint64_t flags) {
@@ -59,6 +60,10 @@ couchstore_error_t couchstore_set_misc(uint8_t direct_io,
 }
 couchstore_error_t couchstore_set_streamid(uint8_t streamid) {
 	config_streamid = streamid;
+	return COUCHSTORE_SUCCESS;
+}
+couchstore_error_t couchstore_set_blocksize(uint64_t blocksize) {
+	config_blocksize = blocksize;
 	return COUCHSTORE_SUCCESS;
 }
 couchstore_error_t couchstore_set_compaction(int mode,
@@ -144,6 +149,7 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
         config.compaction_mode = FDB_COMPACTION_MANUAL;
 		config.compaction_threshold = 0;
     }
+	config.blocksize = config_blocksize;
 	config.block_reusing_threshold = config_inplace;
     config.num_compactor_threads = auto_compaction_threads;
     config.compactor_sleep_duration = c_period;
@@ -169,6 +175,7 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
 	config.fallocate = config_fallocate;
 	config.compaction_libaio = c_libaio;
 	config.streamid = config_streamid;
+    printf("Send streamid %d\n", config_streamid);
 	/* end: Added by ogh */
     config.compress_document_body = (compression)?true:false;
     if (config_flags & 0x1) {
