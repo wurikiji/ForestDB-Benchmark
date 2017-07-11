@@ -605,8 +605,8 @@ void couchstore_trim_stale(Db* db)
 
 	blist = fdb_get_reusable_block(db->fdb, shdr);
 	for (int k =0;k<(size_t)blist.n_blocks;++k) {
-		fsr.start = blist.blocks[k].bid * 4096;
-		fsr.len = blist.blocks[k].count * 4096;
+		fsr.start = blist.blocks[k].bid * config_blocksize;
+		fsr.len = blist.blocks[k].count * config_blocksize;
 		total += fsr.len;
 		ioctl(db->fdb->file->fd, FITRIM, &fsr);
 	}
