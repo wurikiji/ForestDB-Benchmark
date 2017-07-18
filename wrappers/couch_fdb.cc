@@ -36,6 +36,7 @@ static uint8_t c_libaio = 0;
 static uint8_t config_streamid = 0;
 static uint8_t config_inplace = 0;
 static uint64_t config_blocksize = 0;
+static uint8_t config_trim = 0;
 /* end: Added by gihwan */
 
 couchstore_error_t couchstore_set_flags(uint64_t flags) {
@@ -64,6 +65,10 @@ couchstore_error_t couchstore_set_streamid(uint8_t streamid) {
 }
 couchstore_error_t couchstore_set_blocksize(uint64_t blocksize) {
 	config_blocksize = blocksize;
+	return COUCHSTORE_SUCCESS;
+}
+couchstore_error_t couchstore_set_trim(uint8_t trim) {
+	config_trim = trim;
 	return COUCHSTORE_SUCCESS;
 }
 couchstore_error_t couchstore_set_compaction(int mode,
@@ -150,6 +155,7 @@ couchstore_error_t couchstore_open_db_ex(const char *filename,
 		config.compaction_threshold = 0;
     }
 	config.blocksize = config_blocksize;
+	config.trim = config_trim;
 	config.block_reusing_threshold = config_inplace;
     config.num_compactor_threads = auto_compaction_threads;
     config.compactor_sleep_duration = c_period;
@@ -595,13 +601,15 @@ LIBCOUCHSTORE_API
 void couchstore_trim_stale(Db* db)
 {
 	stale_header_info shdr;
-	filemgr_header_revnum_t revnum;
 	struct fstrim_range fsr;
 	uint64_t total=0;
 	reusable_block_list blist;
 
 	shdr = fdb_get_smallest_active_header(db->fdb);
-	revnum = shdr.revnum;
+
+	if (shdr.bid == BLK_NOT_FOUND) {
+		return;
+	}
 
 	blist = fdb_get_reusable_block(db->fdb, shdr);
 	for (int k =0;k<(size_t)blist.n_blocks;++k) {

@@ -1329,6 +1329,7 @@ couchstore_error_t couchstore_set_misc(uint8_t direct_io,
 										uint8_t inplace);
 couchstore_error_t couchstore_set_streamid(uint8_t streamid);
 couchstore_error_t couchstore_set_blocksize(uint64_t blocksize);
+couchstore_error_t couchstore_set_trim(uint8_t trim);
 couchstore_error_t couchstore_set_compaction(int mode,
                                              size_t threshold,
 											 uint8_t compaction_libaio);
@@ -1512,6 +1513,7 @@ void do_bench(struct bench_info *binfo)
 	couchstore_set_misc(binfo->direct_io, binfo->fallocate, binfo->inplace);
 	couchstore_set_streamid(binfo->streamid);
 	couchstore_set_blocksize(binfo->blocksize);
+	couchstore_set_trim(binfo->trim);
 	/* end: Added by ogh */
 #endif
 #if defined(__WT_BENCH) || defined(__FDB_BENCH)
@@ -1856,17 +1858,6 @@ void do_bench(struct bench_info *binfo)
                 written_final = print_proc_io_stat(cmd, 0);
             }
 
-			/* [[ogh : Call trim for all files*/
-			time_gap_for_trim += _gap.tv_sec * 1000000 + _gap.tv_usec;
-			if (binfo->trim && 
-					time_gap_for_trim >= binfo->trim * 1000000) {
-				time_gap_for_trim = 0;
-				printf("\nCall trim stale\n");
-				for (int fidx = 0 ;fidx < binfo->nfiles; fidx++) {
-					couchstore_trim_stale(b_args[0].db[fidx]);
-				}
-			}
-			/* ]]ogh */
             if (log_fp) {
                 // 1. elapsed time
                 // 2. average throughput
